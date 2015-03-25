@@ -3,14 +3,22 @@ package jjug;
 import org.bytedeco.javacpp.opencv_objdetect.CascadeClassifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.converter.BufferedImageHttpMessageConverter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.PostConstruct;
+import javax.imageio.ImageIO;
+import javax.servlet.http.Part;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.function.BiConsumer;
@@ -24,9 +32,28 @@ public class App {
         SpringApplication.run(App.class, args);
     }
 
+    @Autowired
+    FaceDetector faceDetector;
+
+    /*
+     * HTTP リクエスト/レスポンスに BufferedImage を使えるようにする
+     */
+    @Bean
+    BufferedImageHttpMessageConverter bufferedImageHttpMessageConverter() {
+        return new BufferedImageHttpMessageConverter();
+    }
+
     @RequestMapping(value = "/")
     String hello() {
         return "Hello World!";
+    }
+
+    // curl -v -F 'file=@hoge.jpg' http://localhost:8080/duker > after.jpg という感じで使えるように
+    @RequestMapping(value = "/duker", method = RequestMethod.POST)
+    BufferedImage duker(@RequestParam Part file) throws IOException {
+        Mat source = Mat.createFrom(ImageIO.read(file.getInputStream()));
+        faceDetector.detectFaces(source, FaceTranslator::duker);
+        return source.getBufferedImage();
     }
 }
 
@@ -55,9 +82,9 @@ class FaceDetector {
     }
 
     /*
-    * DI でプロパティがセットされたあとに classifier インスタンスを生成するため
-    * ここで初期化処理をする
-    */
+     * DI でプロパティがセットされたあとに classifier インスタンスを生成するため
+     * ここで初期化処理をする
+     */
     @PostConstruct
     void init() throws IOException {
         if (log.isInfoEnabled()) {
