@@ -44,6 +44,7 @@ import java.util.Base64;
 import java.util.function.BiConsumer;
 
 import static org.bytedeco.javacpp.opencv_core.*;
+import static org.bytedeco.javacpp.opencv_imgproc.*;
 
 @SpringBootApplication
 @RestController
@@ -60,6 +61,9 @@ public class App {
     JmsMessagingTemplate jmsMessagingTemplate;
     @Autowired
     SimpMessagingTemplate simpMessagingTemplate;
+
+    @Value("${faceduker.width:200}")
+    int resizedWidth;    // リサイズ後の幅
 
     @Configuration
     @EnableWebSocketMessageBroker
@@ -140,7 +144,14 @@ public class App {
         try (InputStream stream = new ByteArrayInputStream(message.getPayload())) {
             Mat source = Mat.createFrom(ImageIO.read(stream));
             faceDetector.detectFaces(source, FaceTranslator::duker);
-            BufferedImage image = source.getBufferedImage();
+
+            // リサイズ
+            double ratio = ((double) resizedWidth) / source.cols();
+            int height = (int) (ratio * source.rows());
+            Mat out = new Mat(height, resizedWidth, source.type());
+            resize(source, out, new Size(), ratio, ratio, INTER_LINEAR);
+
+            BufferedImage image = out.getBufferedImage();
 
             try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
                 ImageIO.write(image, "png", baos);
