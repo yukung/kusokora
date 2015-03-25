@@ -109,6 +109,12 @@ public class App {
         return "Hello " + name;
     }
 
+    @MessageMapping(value = "/faceConverter")
+    void faceConverter(String base64Image) {
+        Message<byte[]> message = MessageBuilder.withPayload(Base64.getDecoder().decode(base64Image)).build();
+        jmsMessagingTemplate.send("faceConverter", message);
+    }
+
     // curl -v -F 'file=@hoge.jpg' http://localhost:8080/duker > after.jpg という感じで使えるように
     @RequestMapping(value = "/duker", method = RequestMethod.POST)
     BufferedImage duker(@RequestParam Part file) throws IOException {
