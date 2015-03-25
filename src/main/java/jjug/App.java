@@ -71,7 +71,7 @@ public class App {
         return "OK";
     }
 
-    @JmsListener(destination = "hello")
+    @JmsListener(destination = "hello", concurrency = "1-5")
     void handleHelloMessage(Message<String> message) {
         log.info("received! {}", message);
         log.info("msg={}", message.getPayload());
