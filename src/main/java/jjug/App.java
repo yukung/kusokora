@@ -8,12 +8,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Scope;
+import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.http.converter.BufferedImageHttpMessageConverter;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.jms.core.JmsMessagingTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,8 +26,10 @@ import javax.annotation.PostConstruct;
 import javax.imageio.ImageIO;
 import javax.servlet.http.Part;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.function.BiConsumer;
 
 import static org.bytedeco.javacpp.opencv_core.*;
@@ -71,14 +76,33 @@ public class App {
         return "OK";
     }
 
-    @JmsListener(destination = "hello", concurrency = "1-5")
-    void handleHelloMessage(Message<String> message) {
+    @RequestMapping(value = "/queue", method = RequestMethod.POST)
+    String queue(@RequestParam Part file) throws IOException {
+        byte[] src = StreamUtils.copyToByteArray(file.getInputStream());
+        Message<byte[]> message = MessageBuilder.withPayload(src).build();
+        jmsMessagingTemplate.send("faceConverter", message);
+        return "OK";
+    }
+
+//    @JmsListener(destination = "hello", concurrency = "1-5")
+//    void handleHelloMessage(Message<String> message) {
+//        log.info("received! {}", message);
+//        log.info("msg={}", message.getPayload());
+//    }
+
+    @JmsListener(destination = "faceConverter", concurrency = "1-5")
+    void convertFace(Message<byte[]> message) throws IOException {
         log.info("received! {}", message);
-        log.info("msg={}", message.getPayload());
+        try (InputStream stream = new ByteArrayInputStream(message.getPayload())) {
+            Mat source = Mat.createFrom(ImageIO.read(stream));
+            faceDetector.detectFaces(source, FaceTranslator::duker);
+            BufferedImage image = source.getBufferedImage();
+        }
     }
 }
 
 @Component
+@Scope(value = "prototype", proxyMode = ScopedProxyMode.TARGET_CLASS)
 class FaceDetector {
     // 分類器のパスをクラスパスから取得
     @Value("${classifierFile:classpath:/haarcascade_frontalface_default.xml}")

@@ -6,4 +6,4 @@ spring:
     mode: embedded
     embedded:
       enabled: true
-      queues: hello
+      queues: hello, faceConverter
