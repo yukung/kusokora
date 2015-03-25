@@ -8,12 +8,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.http.converter.BufferedImageHttpMessageConverter;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.jms.core.JmsMessagingTemplate;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
@@ -21,6 +25,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.socket.config.annotation.AbstractWebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 
 import javax.annotation.PostConstruct;
 import javax.imageio.ImageIO;
@@ -48,6 +55,23 @@ public class App {
     @Autowired
     JmsMessagingTemplate jmsMessagingTemplate;
 
+    @Configuration
+    @EnableWebSocketMessageBroker
+    static class StompConfig extends AbstractWebSocketMessageBrokerConfigurer {
+
+        @Override
+        public void registerStompEndpoints(StompEndpointRegistry registry) {
+            registry.addEndpoint("endpoint");   // WebSocket のエンドポイント
+        }
+
+        @Override
+        public void configureMessageBroker(MessageBrokerRegistry registry) {
+            registry.setApplicationDestinationPrefixes("/app"); // Controller に処理させる宛先の prefix
+            // queue または topic を有効にする（両方可能）。queue は 1vs1(P2P)、topic は 1vsM(Pub-Sub)
+            registry.enableSimpleBroker("/topic");
+        }
+    }
+
     /*
      * HTTP リクエスト/レスポンスに BufferedImage を使えるようにする
      */
@@ -59,6 +83,14 @@ public class App {
     @RequestMapping(value = "/")
     String hello() {
         return "Hello World!";
+    }
+
+    @MessageMapping(value = "/greet")   // Controller 内の @MessageMapping が付いたメソッドがメッセージを受け取る
+    @SendTo(value = "/topic/greetings")
+        // 処理結果の送り先
+    String greet(String name) {
+        log.info("received {}", name);
+        return "Hello " + name;
     }
 
     // curl -v -F 'file=@hoge.jpg' http://localhost:8080/duker > after.jpg という感じで使えるように
