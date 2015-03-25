@@ -17,6 +17,7 @@ import org.springframework.jms.core.JmsMessagingTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
@@ -28,15 +29,18 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.socket.config.annotation.AbstractWebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
 import javax.annotation.PostConstruct;
 import javax.imageio.ImageIO;
 import javax.servlet.http.Part;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Base64;
 import java.util.function.BiConsumer;
 
 import static org.bytedeco.javacpp.opencv_core.*;
@@ -54,6 +58,8 @@ public class App {
     FaceDetector faceDetector;
     @Autowired
     JmsMessagingTemplate jmsMessagingTemplate;
+    @Autowired
+    SimpMessagingTemplate simpMessagingTemplate;
 
     @Configuration
     @EnableWebSocketMessageBroker
@@ -69,6 +75,12 @@ public class App {
             registry.setApplicationDestinationPrefixes("/app"); // Controller に処理させる宛先の prefix
             // queue または topic を有効にする（両方可能）。queue は 1vs1(P2P)、topic は 1vsM(Pub-Sub)
             registry.enableSimpleBroker("/topic");
+        }
+
+        @Override
+        public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+            // メッセージサイズの上限を10MBに上げる（デフォルトは 64KB）
+            registration.setMessageSizeLimit(10 * 1024 * 1024);
         }
     }
 
@@ -129,6 +141,14 @@ public class App {
             Mat source = Mat.createFrom(ImageIO.read(stream));
             faceDetector.detectFaces(source, FaceTranslator::duker);
             BufferedImage image = source.getBufferedImage();
+
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                ImageIO.write(image, "png", baos);
+                baos.flush();
+                // 画像を Base64 にエンコードしてメッセージ作成し、宛先 '/topic/faces' へメッセージ送信
+                simpMessagingTemplate.convertAndSend("/topic/faces",
+                        Base64.getEncoder().encodeToString(baos.toByteArray()));
+            }
         }
     }
 }
