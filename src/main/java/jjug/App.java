@@ -9,6 +9,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.converter.BufferedImageHttpMessageConverter;
+import org.springframework.jms.annotation.JmsListener;
+import org.springframework.jms.core.JmsMessagingTemplate;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -32,8 +36,12 @@ public class App {
         SpringApplication.run(App.class, args);
     }
 
+    public static final Logger log = LoggerFactory.getLogger(App.class);
+
     @Autowired
     FaceDetector faceDetector;
+    @Autowired
+    JmsMessagingTemplate jmsMessagingTemplate;
 
     /*
      * HTTP リクエスト/レスポンスに BufferedImage を使えるようにする
@@ -54,6 +62,19 @@ public class App {
         Mat source = Mat.createFrom(ImageIO.read(file.getInputStream()));
         faceDetector.detectFaces(source, FaceTranslator::duker);
         return source.getBufferedImage();
+    }
+
+    @RequestMapping(value = "/send")
+    String send(@RequestParam String msg) {
+        Message<String> message = MessageBuilder.withPayload(msg).build();
+        jmsMessagingTemplate.send("hello", message);
+        return "OK";
+    }
+
+    @JmsListener(destination = "hello")
+    void handleHelloMessage(Message<String> message) {
+        log.info("received! {}", message);
+        log.info("msg={}", message.getPayload());
     }
 }
 
